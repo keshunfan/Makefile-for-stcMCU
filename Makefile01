@@ -1,0 +1,121 @@
+##文件基于sdcc编译器编译宏晶单片机写的程序
+#适用型号：stc8a8k64s4a12
+#          stc89c51
+#          stc89c52
+#该文件遵循GNU GPL协议
+#作者汪治
+
+######################################
+# target    目标文件名
+######################################
+TARGET = led
+#######################################
+
+
+# C includes
+C_INCLUDES_DIR= \
+  Drivers/bsp_led \
+  Inc \
+  Src \
+  User
+C_INCLUDES =$(patsubst %,-I%,$(C_INCLUDES_DIR))
+######################################
+# source
+######################################
+# C sources
+
+C_SOURCES_DIR = \
+  Drivers/bsp_led \
+  Inc \
+  Src \
+  User
+
+
+C_SOURCES = $(foreach var,$(C_SOURCES_DIR),$(wildcard $(var)/*.c))
+
+# ASM sources
+ASM_SOURCES =  \
+
+#配置
+#型号参数
+#MCU  型号stc89c51
+#XRAM_LOC   内部扩展的外部ram  起始地址
+#XRAM_SIZE  内部扩展的外部ram 的大小
+#CODE_SIZE  程序存储器大小
+MCU ?=stc89c51
+
+ifeq ($(MCU),stc89c52)
+    XRAM_LOC :=0x0100
+    IRAM_SIZE :=0xff
+    XRAM_SIZE :=0xff
+    CODE_SIZE :=0x2000
+else ifeq ($(MCU),stc8a8k64s4a12)
+    XRAM_LOC :=0x0100
+    IRAM_SIZE :=0xff
+    XRAM_SIZE :=0x1f01
+    CODE_SIZE :=0x10000
+else
+    XRAM_LOC ?=0x0100
+    IRAM_SIZE ?=0xff
+    XRAM_SIZE ?=0xff
+    CODE_SIZE ?=0x1000
+endif
+
+#通用
+#编译 参数
+MCU_SPEED ?=--opt-code-speed
+
+CFLAGS :=$(MCU_SPEED)
+#优化 or 链接 参数
+MODEL =
+#MODEL =--model-large
+SET_IRAM_SIZE :=--iram-size $(IRAM_SIZE)
+SET_XRAM_SIZE :=--xram-size $(XRAM_SIZE)
+SET_XRAM_LOC  :=--xram-loc $(XRAM_LOC)
+ASFLAGS +=$(MODEL) $(SET_IRAM_SIZE) $(SET_XRAM_SIZE) $(SET_XRAM_LOC)
+# paths
+#######################################
+# Build path
+BUILD_DIR = build
+
+
+#######################################
+# binaries  
+# CC 编译器名称
+# LDS  连接器 将编译好的文件连接
+# CP 输出文件 将文件转换为hex
+#
+#######################################
+PREFIX = sdcc
+
+CC = $(PREFIX)  -mmcs51
+LDS = $(PREFIX)  -mmcs51
+CP =packihx
+
+#all
+all:$(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).ihx
+# list of objects
+OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(C_SOURCES:.c=.rel)))
+vpath %.c $(sort $(dir $(C_SOURCES)))
+
+$(BUILD_DIR):
+	mkdir $@
+$(BUILD_DIR)/%.rel: %.c | $(BUILD_DIR)
+	$(CC) -c  $(CFLAGS)  $(C_INCLUDES) $< -o  $@
+$(BUILD_DIR)/$(TARGET).ihx:$(OBJECTS)  Makefile | $(BUILD_DIR)
+	$(LDS)  $(ASFLAGS)  $(OBJECTS) -o $@
+$(BUILD_DIR)/%.hex:$(BUILD_DIR)/%.ihx | $(BUILD_DIR)
+	$(CP) $^ > $@
+
+#######################################
+# clean up
+#######################################
+.PHONY:clean
+clean:
+	-rm -fR $(BUILD_DIR)
+print:
+	@echo $(C_SOURCES)
+	@echo $(OBJECTS)
+.PHONY:burn
+burn:
+	stcgal -a  ./build/$(TARGET).hex
